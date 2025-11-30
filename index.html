@@ -408,17 +408,22 @@
 
             // 打包資料
             const orderData = {
-                securityKey: SECURITY_KEY, // 通關密語
+                securityKey: SECURITY_KEY,
                 name: name,
                 phone: phone,
-                details: cart.map(i => i.desc).join(", "), // 把購物車轉成字串
+                
+                // 【新增這一行】把整個購物車陣列傳過去
+                cartItems: cart, 
+                
+                // 下面這兩行保留當作備用
+                details: cart.map(i => i.desc).join(", "), 
                 amount: document.getElementById('totalAmount').innerText.replace('$',''),
+                
                 pickup_date: date,
                 pickup_time: time,
                 note: note,
                 eulaVersion: globalData.config.EULA_Version || "v1.0"
             };
-
             try {
                 // 送出 POST 請求 (使用 no-cors 模式或是標準模式)
                 // 為了讓 GAS 接收 POST，我們用 fetch 傳送 JSON string
