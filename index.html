@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>訂花服務</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <style>
+        body { background-color: #f8f9fa; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .product-img { width: 100%; height: 300px; object-fit: cover; border-radius: 10px; background-color: #eee; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .cart-summary { background: white; border-top: 1px solid #ddd; position: fixed; bottom: 0; left: 0; width: 100%; padding: 15px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000; display: none; }
+        .container { padding-bottom: 100px; } /* 避免被購物車擋住 */
+        .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; margin: 20px 0 10px 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="loading" class="loading-overlay">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2">載入菜單中...</p>
+    </div>
+
+    <div class="modal fade" id="eulaModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="eulaTitle">服務條款</h5>
+                </div>
+                <div class="modal-body">
+                    <pre id="eulaContent" style="white-space: pre-wrap; font-family: inherit; color: #555;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary w-100" onclick="acceptEULA()">我同意並開始訂購</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mt-3" id="mainApp" style="display:none;">
+        <h3 class="text-center mb-4">🌺 線上訂花</h3>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <img id="productImg" src="" class="product-img mb-3" alt="商品圖片">
+                <h5 id="productDesc" class="fw-bold text-dark">載入中...</h5>
+                <p id="productPrice" class="text-danger fw-bold fs-4">$0</p>
+                <hr>
+
+                <div class="mb-3">
+                    <label class="form-label">選擇等級</label>
+                    <select id="gradeSelect" class="form-select" onchange="onGradeChange()"></select>
+                </div>
+
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label">朵數</label>
+                        <select id="countSelect" class="form-select" onchange="updatePriceDisplay()"></select>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label">花瓣</label>
+                        <select id="petalSelect" class="form-select"></select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">顏色</label>
+                    <select id="colorSelect" class="form-select"></select>
+                </div>
+
+                <button class="btn btn-outline-primary w-100" onclick="addToCart()">加入購物車 🛒</button>
+            </div>
+        </div>
+
+        <div id="cartSection" style="display:none;">
+            <div class="section-title">購物車內容</div>
+            <ul class="list-group mb-3" id="cartList"></ul>
+            
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="section-title" style="margin-top:0;">取貨資訊</div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">取貨日期</label>
+                        <select id="pickupDate" class="form-select" onchange="updateTimeSlots()">
+                            <option value="">請先選擇日期</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">取貨時段</label>
+                        <select id="pickupTime" class="form-select">
+                            <option value="">請先選擇日期</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">您的姓名</label>
+                        <input type="text" id="custName" class="form-control" placeholder="請輸入全名">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">聯絡電話</label>
+                        <input type="tel" id="custPhone" class="form-control" placeholder="09xx-xxx-xxx">
+                    </div>
+                    
+                     <div class="mb-3">
+                        <label class="form-label">備註</label>
+                        <textarea id="custNote" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cart-summary" id="footerBar">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <small class="text-muted">總金額</small>
+                <div class="fs-4 fw-bold text-danger" id="totalAmount">$0</div>
+            </div>
+            <button class="btn btn-success px-4" onclick="submitOrder()" id="btnSubmit">確認送出訂單</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // ============================================
+        // 設定區：您的後端網址與金鑰
+        // ============================================
+        const API_URL = "https://script.google.com/macros/s/AKfycbzIENoFdIdz1LPTu9TW4UNqMphv_NGse1k3iJ_Xjp-A9IWUHtHRwBhuUSXSjLdUXzB4/exec";
+        const SECURITY_KEY = "MyFlowerShop_Secret_2024"; 
+
+        // 全域變數
+        let globalData = {}; // 存放從 GAS 抓回來的全部資料
+        let cart = [];       // 購物車
+        let eulaModal;       // EULA 視窗物件
+
+        // 當網頁載入完成時
+        window.onload = async function() {
+            eulaModal = new bootstrap.Modal(document.getElementById('eulaModal'));
+            await fetchData();
+        };
+
+        // 1. 從 GAS 抓資料
+        async function fetchData() {
+            try {
+                let res = await fetch(API_URL);
+                let json = await res.json();
+                
+                if(json.error) {
+                    alert("系統錯誤：" + json.error);
+                    return;
+                }
+
+                globalData = json;
+                console.log("資料載入成功", globalData);
+
+                // 檢查是否在開放時間
+                checkOpeningTime();
+
+            } catch (e) {
+                alert("無法連線到資料庫，請稍後再試。");
+                console.error(e);
+            }
+        }
+
+        // 2. 檢查開放時間與 EULA
+        function checkOpeningTime() {
+            const config = globalData.config;
+            const now = new Date();
+            const start = new Date(config.Order_Start_Time);
+            const end = new Date(config.Order_End_Time);
+
+            document.getElementById('loading').style.display = 'none';
+
+            if (now < start || now > end) {
+                document.body.innerHTML = `<div class='p-5 text-center'><h3>⛔ 目前非開放下單時間</h3><p>開放時間：<br>${config.Order_Start_Time} <br>~<br> ${config.Order_End_Time}</p></div>`;
+                return;
+            }
+
+            // 檢查是否需要顯示 EULA
+            if (config.EULA_Required === true || config.EULA_Required === "TRUE") {
+                document.getElementById('eulaTitle').innerText = config.EULA_Title || "服務條款";
+                document.getElementById('eulaContent').innerText = config.EULA_Content || "載入中...";
+                eulaModal.show();
+            } else {
+                initApp();
+            }
+        }
+
+        function acceptEULA() {
+            eulaModal.hide();
+            initApp();
+        }
+
+        // 3. 初始化應用程式
+        function initApp() {
+            document.getElementById('mainApp').style.display = 'block';
+            renderGradeSelector();
+            renderPickupDates();
+        }
+
+        // --- 商品邏輯區 ---
+
+        function renderGradeSelector() {
+            // 取得所有唯一的等級 (A, B...)
+            const products = globalData.products;
+            const grades = [...new Set(products.map(p => p.Grade))];
+            
+            const gradeSelect = document.getElementById('gradeSelect');
+            gradeSelect.innerHTML = "";
+            
+            grades.forEach(g => {
+                let option = document.createElement("option");
+                option.value = g;
+                option.text = g + " 級";
+                gradeSelect.add(option);
+            });
+
+            // 預設觸發一次變更
+            onGradeChange();
+        }
+
+        function onGradeChange() {
+            const selectedGrade = document.getElementById('gradeSelect').value;
+            const products = globalData.products.filter(p => p.Grade == selectedGrade);
+
+            // 更新說明與圖片 (取第一筆資料當作代表)
+            if(products.length > 0) {
+                const rep = products[0];
+                document.getElementById('productDesc').innerText = rep.Description;
+                document.getElementById('productImg').src = rep.Image_URL || "https://via.placeholder.com/300?text=No+Image";
+                
+                // 更新顏色選單
+                const colorSelect = document.getElementById('colorSelect');
+                colorSelect.innerHTML = "";
+                if(rep.Colors) {
+                    rep.Colors.toString().split(',').forEach(c => {
+                        let opt = document.createElement("option");
+                        opt.value = c.trim();
+                        opt.text = c.trim();
+                        colorSelect.add(opt);
+                    });
+                }
+                
+                // 更新花瓣選單
+                const petalSelect = document.getElementById('petalSelect');
+                petalSelect.innerHTML = "";
+                if(rep.Petals) {
+                    rep.Petals.toString().split(',').forEach(p => {
+                        let opt = document.createElement("option");
+                        opt.value = p.trim();
+                        opt.text = p.trim();
+                        petalSelect.add(opt);
+                    });
+                }
+            }
+
+            // 更新朵數選單 (根據 Grade 篩選出不同的 Count)
+            const countSelect = document.getElementById('countSelect');
+            countSelect.innerHTML = "";
+            products.forEach(p => {
+                let opt = document.createElement("option");
+                opt.value = p.Count; // 用朵數當 Value
+                opt.text = p.Count + " 朵";
+                opt.dataset.price = p.Price; // 把價格藏在 data 屬性裡
+                countSelect.add(opt);
+            });
+
+            updatePriceDisplay();
+        }
+
+        function updatePriceDisplay() {
+            const countSelect = document.getElementById('countSelect');
+            const selectedOption = countSelect.options[countSelect.selectedIndex];
+            if(selectedOption) {
+                const price = selectedOption.dataset.price;
+                document.getElementById('productPrice').innerText = "$" + price;
+            }
+        }
+
+        // --- 購物車邏輯區 ---
+
+        function addToCart() {
+            const grade = document.getElementById('gradeSelect').value;
+            const countSelect = document.getElementById('countSelect');
+            const count = countSelect.value;
+            const price = parseInt(countSelect.options[countSelect.selectedIndex].dataset.price);
+            const color = document.getElementById('colorSelect').value;
+            const petal = document.getElementById('petalSelect').value;
+
+            // 建立商品物件
+            const item = {
+                id: Date.now(), // 簡單的唯一 ID
+                desc: `${grade}級 - ${count}朵 - ${color} - ${petal}`,
+                price: price
+            };
+
+            cart.push(item);
+            renderCart();
+            alert("已加入購物車！");
+        }
+
+        function renderCart() {
+            const list = document.getElementById('cartList');
+            list.innerHTML = "";
+            let total = 0;
+
+            cart.forEach((item, index) => {
+                total += item.price;
+                let li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `
+                    <div>${item.desc} <br><small class="text-muted">$${item.price}</small></div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(${index})">✕</button>
+                `;
+                list.appendChild(li);
+            });
+
+            document.getElementById('totalAmount').innerText = "$" + total;
+
+            // 顯示或隱藏結帳區
+            if (cart.length > 0) {
+                document.getElementById('cartSection').style.display = 'block';
+                document.getElementById('footerBar').style.display = 'block';
+            } else {
+                document.getElementById('cartSection').style.display = 'none';
+                document.getElementById('footerBar').style.display = 'none';
+            }
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            renderCart();
+        }
+
+        // --- 取貨與結帳邏輯區 ---
+
+        function renderPickupDates() {
+            const schedule = globalData.schedule; // 來自 Pickup_Schedule 分頁
+            const leadTime = parseInt(globalData.config.Lead_Time_Days || 0);
+            
+            // 計算最早可取貨日 (今天 + LeadTime)
+            let minDate = new Date();
+            minDate.setDate(minDate.getDate() + leadTime);
+            minDate.setHours(0,0,0,0);
+
+            const dateSelect = document.getElementById('pickupDate');
+            
+            // 過濾日期
+            schedule.forEach(s => {
+                let slotDate = new Date(s.Date); // 假設格式 2023/12/15
+                // 如果日期有效且大於等於 minDate
+                if (slotDate >= minDate) {
+                    let opt = document.createElement("option");
+                    // 格式化日期字串回填 Value (保持與 Excel 一致)
+                    // 注意：這邊簡單處理，實際上建議用 ISO 字串比對
+                    // 這裡直接取 s.Date (GAS 傳回來的原始字串)
+                    opt.value = s.Date; 
+                    // 顯示在選單上的文字 (只取日期部分)
+                    opt.text = new Date(s.Date).toLocaleDateString('zh-TW');
+                    opt.dataset.slots = s.Time_Slots; // 把時段藏在 data 屬性
+                    dateSelect.add(opt);
+                }
+            });
+        }
+
+        function updateTimeSlots() {
+            const dateSelect = document.getElementById('pickupDate');
+            const timeSelect = document.getElementById('pickupTime');
+            timeSelect.innerHTML = ""; // 清空
+
+            const selectedOption = dateSelect.options[dateSelect.selectedIndex];
+            if (selectedOption && selectedOption.dataset.slots) {
+                const slots = selectedOption.dataset.slots.split(',');
+                slots.forEach(t => {
+                    let opt = document.createElement("option");
+                    opt.value = t.trim();
+                    opt.text = t.trim();
+                    timeSelect.add(opt);
+                });
+            } else {
+                timeSelect.add(new Option("請先選擇日期", ""));
+            }
+        }
+
+        async function submitOrder() {
+            if(cart.length === 0) return alert("購物車是空的！");
+            
+            const name = document.getElementById('custName').value;
+            const phone = document.getElementById('custPhone').value;
+            const date = document.getElementById('pickupDate').value;
+            const time = document.getElementById('pickupTime').value;
+            const note = document.getElementById('custNote').value;
+
+            if(!name || !phone || !date || !time) {
+                return alert("請完整填寫取貨資訊 (姓名、電話、日期、時段)");
+            }
+
+            // 鎖定按鈕避免重複送出
+            const btn = document.getElementById('btnSubmit');
+            btn.disabled = true;
+            btn.innerText = "訂單傳送中...";
+
+            // 打包資料
+            const orderData = {
+                securityKey: SECURITY_KEY, // 通關密語
+                name: name,
+                phone: phone,
+                details: cart.map(i => i.desc).join(", "), // 把購物車轉成字串
+                amount: document.getElementById('totalAmount').innerText.replace('$',''),
+                pickup_date: date,
+                pickup_time: time,
+                note: note
+            };
+
+            try {
+                // 送出 POST 請求 (使用 no-cors 模式或是標準模式)
+                // 為了讓 GAS 接收 POST，我們用 fetch 傳送 JSON string
+                let res = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify(orderData)
+                });
+                
+                let json = await res.json();
+                
+                if(json.result === "success") {
+                    alert("✅ 訂購成功！\n您的訂單編號：" + json.orderId + "\n請截圖保存，屆時憑此畫面取貨付款。");
+                    // 成功後重整網頁或關閉
+                    if (liff.isInClient()) {
+                        liff.closeWindow();
+                    } else {
+                        location.reload();
+                    }
+                } else {
+                    alert("❌ 訂購失敗：" + json.message);
+                    btn.disabled = false;
+                    btn.innerText = "確認送出訂單";
+                }
+
+            } catch (e) {
+                alert("連線錯誤，請檢查網路或聯繫店家。");
+                console.error(e);
+                btn.disabled = false;
+                btn.innerText = "確認送出訂單";
+            }
+        }
+    </script>
+</body>
+</html>
