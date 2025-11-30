@@ -415,7 +415,8 @@
                 amount: document.getElementById('totalAmount').innerText.replace('$',''),
                 pickup_date: date,
                 pickup_time: time,
-                note: note
+                note: note,
+                eulaVersion: globalData.config.EULA_Version || "v1.0"
             };
 
             try {
