@@ -101,4 +101,309 @@
                             <input type="tel" id="custPhone" class="form-control" placeholder="09xx-xxx-xxx">
                         </div>
                         <div class="mb-3">
-                            <label>備註</label
+                            <label>備註</label>
+                            <textarea id="custNote" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cart-summary" id="footerBar" style="display:none;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div><small class="text-muted">總金額</small><div class="fs-4 fw-bold text-danger" id="totalAmount">$0</div></div>
+                    <button class="btn btn-success px-4" onclick="submitOrder()" id="btnSubmit">確認送出</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="pageCheck" style="display:none;">
+            <h4 class="text-center mb-3">🔍 訂單查詢</h4>
+            <div class="card shadow-sm p-3 mb-3">
+                <div class="mb-3">
+                    <label class="form-label">訂購人姓名</label>
+                    <input type="text" id="queryName" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">聯絡電話</label>
+                    <input type="tel" id="queryPhone" class="form-control">
+                </div>
+                <button class="btn btn-primary w-100" onclick="queryOrders()">查詢訂單</button>
+            </div>
+            <div id="queryResult"></div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ============================================
+        // 設定區
+        // ============================================
+        // 請確認這個 URL 跟您 Apps Script 部署的網址一樣
+        const API_URL = "https://script.google.com/macros/s/AKfycbzIENoFdIdz1LPTu9TW4UNqMphv_NGse1k3iJ_Xjp-A9IWUHtHRwBhuUSXSjLdUXzB4/exec";
+        const SECURITY_KEY = "MyFlowerShop_Secret_2024"; 
+        
+        let globalData = {};
+        let cart = [];
+        let eulaModal;
+
+        window.onload = async function() {
+            eulaModal = new bootstrap.Modal(document.getElementById('eulaModal'));
+            await fetchData();
+        };
+
+        // --- 核心流程 ---
+
+        async function fetchData() {
+            try {
+                let res = await fetch(API_URL);
+                let json = await res.json();
+                if(json.error) return alert("系統錯誤：" + json.error);
+                
+                globalData = json;
+                document.getElementById('loading').style.display = 'none';
+                
+                // 檢查時間 (決定是否顯示訂花頁面)
+                const config = globalData.config;
+                const now = new Date();
+                const start = new Date(config.Order_Start_Time);
+                const end = new Date(config.Order_End_Time);
+                
+                // 無論時間是否開放，都先顯示導覽列 (讓客人能查單)
+                document.getElementById('navBar').style.display = 'flex';
+
+                if (now < start || now > end) {
+                    // 若不在時間內，訂花頁顯示提示
+                    document.getElementById('pageOrder').innerHTML = "<div class='p-5 text-center'><h3>⛔ 目前非開放下單時間</h3></div>";
+                    // 預設切換到查詢頁
+                    switchTab('check');
+                } else {
+                    // 若在時間內，檢查 EULA
+                    if (config.EULA_Required === true || config.EULA_Required === "TRUE") {
+                        document.getElementById('eulaTitle').innerText = config.EULA_Title || "服務條款";
+                        document.getElementById('eulaContent').innerText = config.EULA_Content || "...";
+                        eulaModal.show();
+                    } else {
+                        initApp();
+                    }
+                }
+            } catch (e) { 
+                alert("連線錯誤，請稍後再試。請檢查網路或 API 網址是否正確。"); 
+                console.error(e);
+            }
+        }
+
+        function acceptEULA() { eulaModal.hide(); initApp(); }
+
+        function initApp() { 
+            renderGradeSelector(); 
+            renderPickupDates();
+            switchTab('order'); // 預設顯示訂花頁
+        }
+
+        function switchTab(tab) {
+            if(tab === 'order') {
+                document.getElementById('pageOrder').style.display = 'block';
+                document.getElementById('pageCheck').style.display = 'none';
+                document.getElementById('btnTabOrder').classList.add('active');
+                document.getElementById('btnTabCheck').classList.remove('active');
+                if(cart.length > 0) document.getElementById('footerBar').style.display = 'block';
+            } else {
+                document.getElementById('pageOrder').style.display = 'none';
+                document.getElementById('pageCheck').style.display = 'block';
+                document.getElementById('btnTabOrder').classList.remove('active');
+                document.getElementById('btnTabCheck').classList.add('active');
+                document.getElementById('footerBar').style.display = 'none';
+            }
+        }
+
+        // --- 商品邏輯區 ---
+
+        function renderGradeSelector() {
+            if(!globalData.products) return;
+            const grades = [...new Set(globalData.products.map(p => p.Grade))];
+            const gradeSelect = document.getElementById('gradeSelect');
+            gradeSelect.innerHTML = "";
+            grades.forEach(g => {
+                let option = document.createElement("option");
+                option.value = g; option.text = g + " 級";
+                gradeSelect.add(option);
+            });
+            onGradeChange();
+        }
+
+        function onGradeChange() {
+            const selectedGrade = document.getElementById('gradeSelect').value;
+            const products = globalData.products.filter(p => p.Grade == selectedGrade);
+
+            if(products.length > 0) {
+                const rep = products[0];
+                document.getElementById('productDesc').innerText = rep.Description;
+                document.getElementById('productImg').src = rep.Image_URL || "https://via.placeholder.com/300?text=No+Image";
+                
+                const colorSelect = document.getElementById('colorSelect');
+                colorSelect.innerHTML = "";
+                if(rep.Colors) {
+                    rep.Colors.toString().split(',').forEach(c => {
+                        let opt = document.createElement("option");
+                        opt.value = c.trim(); opt.text = c.trim();
+                        colorSelect.add(opt);
+                    });
+                }
+                
+                const petalSelect = document.getElementById('petalSelect');
+                petalSelect.innerHTML = "";
+                if(rep.Petals) {
+                    rep.Petals.toString().split(',').forEach(p => {
+                        let opt = document.createElement("option");
+                        opt.value = p.trim(); opt.text = p.trim();
+                        petalSelect.add(opt);
+                    });
+                }
+            }
+
+            const countSelect = document.getElementById('countSelect');
+            countSelect.innerHTML = "";
+            products.forEach(p => {
+                let opt = document.createElement("option");
+                opt.value = p.Count; opt.text = p.Count + " 朵";
+                opt.dataset.price = p.Price;
+                countSelect.add(opt);
+            });
+            updatePriceDisplay();
+        }
+
+        function updatePriceDisplay() {
+            const countSelect = document.getElementById('countSelect');
+            const selectedOption = countSelect.options[countSelect.selectedIndex];
+            if(selectedOption) {
+                document.getElementById('productPrice').innerText = "$" + selectedOption.dataset.price;
+            }
+        }
+
+        // --- 購物車區 ---
+
+        function addToCart() {
+            const grade = document.getElementById('gradeSelect').value;
+            const countSelect = document.getElementById('countSelect');
+            const price = parseInt(countSelect.options[countSelect.selectedIndex].dataset.price);
+            const count = countSelect.value;
+            const color = document.getElementById('colorSelect').value;
+            const petal = document.getElementById('petalSelect').value;
+
+            const item = {
+                id: Date.now(),
+                desc: `${grade}級 - ${count}朵 - ${color} - ${petal}`,
+                price: price
+            };
+
+            cart.push(item);
+            renderCart();
+            alert("已加入購物車！");
+        }
+
+        function renderCart() {
+            const list = document.getElementById('cartList');
+            list.innerHTML = "";
+            let total = 0;
+
+            cart.forEach((item, index) => {
+                total += item.price;
+                let li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `<div>${item.desc} <br><small class="text-muted">$${item.price}</small></div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(${index})">✕</button>`;
+                list.appendChild(li);
+            });
+
+            document.getElementById('totalAmount').innerText = "$" + total;
+
+            if (cart.length > 0) {
+                document.getElementById('cartSection').style.display = 'block';
+                document.getElementById('footerBar').style.display = 'block';
+            } else {
+                document.getElementById('cartSection').style.display = 'none';
+                document.getElementById('footerBar').style.display = 'none';
+            }
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            renderCart();
+        }
+
+        // --- 取貨與 API 交互區 ---
+
+        function renderPickupDates() {
+            if(!globalData.schedule) return;
+            const schedule = globalData.schedule;
+            const leadTime = parseInt(globalData.config.Lead_Time_Days || 0);
+            
+            let minDate = new Date();
+            minDate.setDate(minDate.getDate() + leadTime);
+            minDate.setHours(0,0,0,0);
+
+            const dateSelect = document.getElementById('pickupDate');
+            schedule.forEach(s => {
+                let slotDate = new Date(s.Date);
+                if (slotDate >= minDate) {
+                    let opt = document.createElement("option");
+                    opt.value = s.Date; 
+                    opt.text = new Date(s.Date).toLocaleDateString('zh-TW');
+                    opt.dataset.slots = s.Time_Slots;
+                    dateSelect.add(opt);
+                }
+            });
+        }
+
+        function updateTimeSlots() {
+            const dateSelect = document.getElementById('pickupDate');
+            const timeSelect = document.getElementById('pickupTime');
+            timeSelect.innerHTML = ""; 
+
+            const selectedOption = dateSelect.options[dateSelect.selectedIndex];
+            if (selectedOption && selectedOption.dataset.slots) {
+                const slots = selectedOption.dataset.slots.split(',');
+                slots.forEach(t => {
+                    let opt = document.createElement("option");
+                    opt.value = t.trim(); opt.text = t.trim();
+                    timeSelect.add(opt);
+                });
+            } else {
+                timeSelect.add(new Option("請先選擇日期", ""));
+            }
+        }
+
+        // 下單 (submit)
+        async function submitOrder() {
+            if(cart.length === 0) return alert("購物車空的");
+            const name = document.getElementById('custName').value;
+            const phone = document.getElementById('custPhone').value;
+            const date = document.getElementById('pickupDate').value;
+            const time = document.getElementById('pickupTime').value;
+            const note = document.getElementById('custNote').value;
+            if(!name || !phone || !date) return alert("請填寫完整取貨資訊");
+
+            document.getElementById('btnSubmit').disabled = true;
+            document.getElementById('btnSubmit').innerText = "處理中...";
+
+            const orderData = {
+                action: "submit",
+                securityKey: SECURITY_KEY,
+                name: name, phone: phone,
+                cartItems: cart, // 傳送陣列
+                pickup_date: date, pickup_time: time, note: note,
+                eulaVersion: globalData.config.EULA_Version
+            };
+
+            await sendPost(orderData, function(json) {
+                alert("✅ 訂購成功！編號：" + json.orderId);
+                location.reload();
+            });
+        }
+
+        // 查詢 (query)
+        async function queryOrders() {
+            const name = document.getElementById('queryName').value;
+            const phone = document.getElementById('queryPhone').value;
+            if(!name ||
