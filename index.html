@@ -406,4 +406,89 @@
         async function queryOrders() {
             const name = document.getElementById('queryName').value;
             const phone = document.getElementById('queryPhone').value;
-            if(!name ||
+            if(!name || !phone) return alert("請輸入姓名與電話");
+
+            document.getElementById('queryResult').innerHTML = "<p class='text-center mt-3'>查詢中...</p>";
+
+            const req = {
+                action: "query",
+                securityKey: SECURITY_KEY,
+                name: name,
+                phone: phone
+            };
+
+            try {
+                let res = await fetch(API_URL, { method: "POST", body: JSON.stringify(req) });
+                let json = await res.json();
+                
+                const div = document.getElementById('queryResult');
+                div.innerHTML = "";
+                
+                if(!json.orders || json.orders.length === 0) {
+                    div.innerHTML = "<p class='text-center mt-3 text-muted'>查無資料 (或訂單已取消)</p>";
+                    return;
+                }
+
+                const deadline = new Date(json.deadline);
+                const now = new Date();
+                const canCancel = now < deadline;
+
+                json.orders.forEach(o => {
+                    let itemsHtml = o.items.map(i => `<li>${i}</li>`).join("");
+                    let btnHtml = canCancel 
+                        ? `<button class="btn btn-outline-danger btn-sm mt-2" onclick="cancelOrder('${o.id}', '${name}', '${phone}')">取消訂單</button>` 
+                        : `<small class="text-muted d-block mt-2">超過取消期限 (${json.deadline})</small>`;
+
+                    div.innerHTML += `
+                        <div class="card mt-3 border-primary">
+                            <div class="card-header d-flex justify-content-between">
+                                <strong>${o.date}</strong>
+                                <span class="badge bg-success">${o.status}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-1">單號：${o.id}</p>
+                                <p class="mb-1">取貨：${o.pickup}</p>
+                                <ul class="small text-muted ps-3 mb-2">${itemsHtml}</ul>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-danger">$${o.total}</span>
+                                    ${btnHtml}
+                                </div>
+                            </div>
+                        </div>`;
+                });
+            } catch(e) { alert("查詢錯誤"); }
+        }
+
+        // 取消 (cancel)
+        async function cancelOrder(oid, name, phone) {
+            if(!confirm("確定要取消這筆訂單嗎？")) return;
+            const req = {
+                action: "cancel",
+                securityKey: SECURITY_KEY,
+                orderId: oid, name: name, phone: phone
+            };
+            await sendPost(req, function(json) {
+                alert("訂單已取消！");
+                queryOrders();
+            });
+        }
+
+        // 通用發送
+        async function sendPost(data, onSuccess) {
+            try {
+                let res = await fetch(API_URL, { method: "POST", body: JSON.stringify(data) });
+                let json = await res.json();
+                if(json.result === "success") {
+                    onSuccess(json);
+                } else {
+                    alert("操作失敗：" + json.message);
+                    if(document.getElementById('btnSubmit')) {
+                        document.getElementById('btnSubmit').disabled = false;
+                        document.getElementById('btnSubmit').innerText = "確認送出";
+                    }
+                }
+            } catch(e) { alert("連線錯誤"); console.error(e); }
+        }
+    </script>
+</body>
+</html>
