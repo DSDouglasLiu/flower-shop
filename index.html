@@ -104,6 +104,7 @@
         // 請確認這個 URL 跟您 Apps Script 部署的網址一樣
         const API_URL = "https://script.google.com/macros/s/AKfycbzNRtWzoIzjFxDqjr6AwRKRJk_0rbB9tQgdJ1quhjXcVDWCdsHBw3BOwfWMRcAnFOES/exec";
         const SECURITY_KEY = "MyFlowerShop_Secret_2024"; 
+        const MY_LIFF_ID = "2008600271-8Jwz3Akz";
         
         let globalData = {};
         let cart = [];
@@ -111,6 +112,19 @@
 
         window.onload = async function() {
             eulaModal = new bootstrap.Modal(document.getElementById('eulaModal'));
+            
+            // 1. 先啟動 LIFF
+            try {
+                await liff.init({ liffId: MY_LIFF_ID });
+                // 如果客人沒登入 LINE (例如用電腦瀏覽器)，這行會讓他登入，但通常在手機上會自動登入
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                }
+            } catch (err) {
+                console.error('LIFF 初始化失敗', err);
+            }
+
+            // 2. 再載入資料
             await fetchData();
         };
 
@@ -341,7 +355,13 @@
 
             await sendPost(orderData, function(json) {
                 alert("✅ 訂購成功！編號：" + json.orderId + "\n請截圖保存！");
-                location.reload();
+                
+                // 👇 修改這裡：如果是 LIFF 環境，就關閉視窗；否則重新整理
+                if (liff.isInClient()) {
+                    liff.closeWindow();
+                } else {
+                    location.reload();
+                }
             });
         }
 
