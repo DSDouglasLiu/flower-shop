@@ -141,7 +141,7 @@
         // 設定區
         // ============================================
         // 請確認這個 URL 跟您 Apps Script 部署的網址一樣
-        const API_URL = "https://script.google.com/macros/s/AKfycbxh2SprdnXkDSokch5IHfFPnz7IuoiOkvO2ZSNyLM7HkKEGg50f0r6Vqs-cgAmNijY/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbxR2-XvsmVDXNRCtLsqbbOSefCA5jQniRx9_DQkV26i--D9V1adz9Ncgzs15GqPgjFE/exec";
         const SECURITY_KEY = "MyFlowerShop_Secret_2024"; 
         
         let globalData = {};
@@ -476,31 +476,30 @@
 
         // 通用發送
         // 最終必殺版 sendPost（直接複製貼上，不准改一個字！）
+// 2025 最終核彈版（直接複製整段貼上）
 async function sendPost(data, onSuccess) {
-    // 把 JSON 變成「偽表單」方式送出，徹底避開 CORS 跟 Content-Type 地雷
     const formData = new FormData();
     formData.append('data', JSON.stringify(data));
 
     try {
-        let res = await fetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: "POST",
-            mode: "no-cors",           // 一定要加
-            body: formData             // 用 FormData 包起來
+            mode: "no-cors",
+            body: formData
         });
 
-        // no-cors 模式下根本讀不到 response，所以直接當作成功
         if (data.action === "submit") {
-            alert("訂購成功！訂單編號：" + data.cartItems.map(i => i.desc).join(" + ") + "\n請記得截圖保留");
-            setTimeout(() => location.reload(), 1500);
+            alert("訂購成功！\n訂單內容：\n" + 
+                  data.cartItems.map(i => "• " + i.desc + " $" + i.price).join("\n") + 
+                  "\n\n請記得截圖保存，謝謝！");
+            setTimeout(() => location.reload(), 2000);
         } else {
-            onSuccess({result: "success"});
+            onSuccess && onSuccess({result: "success"});
         }
-
     } catch(e) {
         alert("送出失敗，請檢查網路或聯絡店家");
-        console.error(e);
-        document.getElementById('btnSubmit') && (document.getElementById('btnSubmit').disabled = false);
-        document.getElementById('btnSubmit') && (document.getElementById('btnSubmit').innerText = "確認送出");
+        document.getElementById('btnSubmit')?.disabled = false;
+        document.getElementById('btnSubmit')?.innerText = "確認送出";
     }
 }
     </script>
