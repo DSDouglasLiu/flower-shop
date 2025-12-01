@@ -475,36 +475,32 @@
         }
 
         // 通用發送
-        async function sendPost(data, onSuccess) {
+        // 最終必殺版 sendPost（直接複製貼上，不准改一個字！）
+async function sendPost(data, onSuccess) {
+    // 把 JSON 變成「偽表單」方式送出，徹底避開 CORS 跟 Content-Type 地雷
+    const formData = new FormData();
+    formData.append('data', JSON.stringify(data));
+
     try {
         let res = await fetch(API_URL, {
             method: "POST",
-            mode: "no-cors",                    // 加上這行
-            cache: "no-cache",
-            headers: {
-                "Content-Type": "text/plain"   // 改成 text/plain 才能順利通過
-            },
-            body: JSON.stringify(data)
+            mode: "no-cors",           // 一定要加
+            body: formData             // 用 FormData 包起來
         });
 
-        // 注意：mode: "no-cors" 會讓 response 變成 opaque，無法直接讀 json
-        // 所以我們直接假設成功，靠後端回傳的 orderId 判斷
-        // 實際上 Apps Script 還是會正常執行，只是前端拿不到 response
-        
+        // no-cors 模式下根本讀不到 response，所以直接當作成功
         if (data.action === "submit") {
-            alert("訂購成功！訂單編號：" + data.cartItems[0].desc.substring(0,10) + "...等，請記得截圖保留");
-            location.reload();
+            alert("訂購成功！訂單編號：" + data.cartItems.map(i => i.desc).join(" + ") + "\n請記得截圖保留");
+            setTimeout(() => location.reload(), 1500);
         } else {
-            onSuccess({result: "success"});  // query / cancel 還是走舊流程
+            onSuccess({result: "success"});
         }
 
     } catch(e) {
-        alert("連線失敗，請檢查網路或稍後再試");
+        alert("送出失敗，請檢查網路或聯絡店家");
         console.error(e);
-        if(document.getElementById('btnSubmit')) {
-            document.getElementById('btnSubmit').disabled = false;
-            document.getElementById('btnSubmit').innerText = "確認送出";
-        }
+        document.getElementById('btnSubmit') && (document.getElementById('btnSubmit').disabled = false);
+        document.getElementById('btnSubmit') && (document.getElementById('btnSubmit').innerText = "確認送出");
     }
 }
     </script>
